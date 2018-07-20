@@ -8,7 +8,7 @@
 
 -record(state, {channel, messages = [], subscribers = [], max_age,
         last_pull, last_purge, supervisor}).
-
+%% 每个Channel实际是在这里面进行实现的
 start_link(MaxAge, ChannelSup, Channel) ->
     gen_server:start_link(?MODULE, [MaxAge, ChannelSup, Channel], []).
 
@@ -17,7 +17,7 @@ init([MaxAge, ChannelSup, Channel]) ->
             max_age = MaxAge,
             supervisor = ChannelSup,
             channel = Channel,
-            messages = gb_trees:empty(),
+            messages = gb_trees:empty(), %% 使用gb_trees来保存数据
             last_pull = now_to_micro_seconds(os:timestamp()),
             last_purge = now_to_micro_seconds(os:timestamp()) },
      MaxAge * 1000}.
@@ -95,14 +95,14 @@ messages_newer_than_timestamp(Timestamp, Messages) ->
     tiny_pq:foldr_new(fun(V, Acc) -> [V|Acc] end, [], Messages, Timestamp).
 
 purge_old_messages(State) ->
-    Now = now_to_micro_seconds(os:timestamp()),
-    LastPurge = State#state.last_purge,
+    Now = now_to_micro_seconds(os:timestamp()), %% 当前时间
+    LastPurge = State#state.last_purge, %% 上次最后清理的时间
     Duration = seconds_to_micro_seconds(1),
     if
-        Now - LastPurge > Duration ->
+        Now - LastPurge > Duration -> %% 两次清理时间超过1秒
             State#state{
                 messages = tiny_pq:prune_old(State#state.messages,
-                    Now - seconds_to_micro_seconds(State#state.max_age)),
+                    Now - seconds_to_micro_seconds(State#state.max_age)),%% 当前时间减去生命周期作为优先级
                 last_purge = Now };
         true ->
             State
@@ -112,7 +112,7 @@ pull_messages(Timestamp, Subscriber, State) ->
     Now = now_to_micro_seconds(os:timestamp()),
     case messages_newer_than_timestamp(Timestamp, State#state.messages) of
         ReturnMessages when erlang:length(ReturnMessages) > 0 ->
-            Subscriber ! {self(), Now, ReturnMessages},
+            Subscriber ! {self(), Now, ReturnMessages}, %% 将消息一次性发送给订阅者
             {State#state.subscribers, Now};
         _ ->
             {add_subscriber(Subscriber, State#state.subscribers), Now}
@@ -120,7 +120,7 @@ pull_messages(Timestamp, Subscriber, State) ->
 
 % Checks if the new subscriber pid already has a monitor
 add_subscriber(NewSubscriber, Subscribers) ->
-        case lists:keymember(NewSubscriber, 2, Subscribers) of
+    case lists:keymember(NewSubscriber, 2, Subscribers) of
 		true -> Subscribers;
 		false -> [{erlang:monitor(process, NewSubscriber), NewSubscriber} | Subscribers]
 	end.

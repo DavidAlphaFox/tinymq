@@ -57,7 +57,7 @@ handle_info(_Info, State) ->
 
 
 % internal
-
+%% 查找想要订阅的Channel，使用的是字典来保存Channel的pid
 find_or_create_channel(Channel, #state{dict = Chan2Pid, max_age = MaxAge} = State) ->
     case dict:find(Channel, Chan2Pid) of
         {ok, Pid} ->
